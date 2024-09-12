@@ -1,6 +1,17 @@
 [package]
 name = "renderkit"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
 
+
+[dependencies.glam]
+version = "0.28"
+features = ["mint", "approx"]
+
 [dependencies]
+gl = "0.14"
+mint = "0.5.9"
+approx = "0.5.1"
+
+[dependencies.shader_def]
+path = "shader_def"
