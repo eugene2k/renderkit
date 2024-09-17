@@ -1,6 +1,8 @@
 #![feature(adt_const_params)]
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
+#![feature(variant_count)]
+#![feature(const_refs_to_static)]
 
 mod buffer;
 mod framebuffer;
@@ -239,16 +241,32 @@ pub enum VertexAttributeType {
     Position3D,
     Position2D,
     Normal,
+    Tangent,
+    Bitangent,
     UVCoord,
     Weights,
     Joints,
 }
 impl VertexAttributeType {
+    pub const fn offsets(attributes: &[Self]) -> [u8; std::mem::variant_count::<Self>()] {
+        let mut offsets = [255; std::mem::variant_count::<Self>()];
+        let mut i = 0;
+        let mut next_offset = 0;
+        while i < attributes.len() {
+            let attr = attributes[i];
+            offsets[attr as usize] = next_offset;
+            next_offset += attr.size();
+            i += 1;
+        }
+        offsets
+    }
     pub const fn attr_count(&self) -> u8 {
         match self {
             VertexAttributeType::Position3D => 3,
             VertexAttributeType::Position2D => 2,
             VertexAttributeType::Normal => 3,
+            VertexAttributeType::Tangent => 3,
+            VertexAttributeType::Bitangent => 3,
             VertexAttributeType::UVCoord => 2,
             VertexAttributeType::Weights => 4,
             VertexAttributeType::Joints => 4,
@@ -259,6 +277,8 @@ impl VertexAttributeType {
             VertexAttributeType::Position3D => Type::F32,
             VertexAttributeType::Position2D => Type::F32,
             VertexAttributeType::Normal => Type::F32,
+            VertexAttributeType::Tangent => Type::F32,
+            VertexAttributeType::Bitangent => Type::F32,
             VertexAttributeType::UVCoord => Type::F32,
             VertexAttributeType::Weights => Type::F32,
             VertexAttributeType::Joints => Type::U8,
@@ -287,6 +307,8 @@ impl VertexAttributeType {
             VertexAttributeType::Position3D => InputType::Vec3,
             VertexAttributeType::Position2D => InputType::Vec2,
             VertexAttributeType::Normal => InputType::Vec3,
+            VertexAttributeType::Tangent => InputType::Vec3,
+            VertexAttributeType::Bitangent => InputType::Vec3,
             VertexAttributeType::UVCoord => InputType::Vec2,
             VertexAttributeType::Weights => InputType::Vec4,
             VertexAttributeType::Joints => InputType::IVec4,
@@ -300,7 +322,7 @@ macro_rules! declare_layouts {
         1
     };
     (@count $attr:ident $($rest:ident)*) => {
-        1+declare_layouts!(@count $($rest)*)
+        1+$crate::declare_layouts!(@count $($rest)*)
     };
     ($($name: ident = $($attr:ident),*;)*) => {
         $(
@@ -312,7 +334,10 @@ macro_rules! declare_layouts {
                 ];
                 let metadata = &[$($crate::VertexAttributeType::$attr.metadata()),*];
                 let shader_layout = &[$($crate::VertexAttributeType::$attr.shader_type()),*];
-                $crate::AttribLayout { vertex_attributes, metadata, shader_layout }
+
+                let offsets = $crate::VertexAttributeType::offsets(vertex_attributes);
+
+                $crate::AttribLayout { vertex_attributes, metadata, shader_layout, offsets }
             };
         )*
     };
@@ -321,6 +346,7 @@ pub struct AttribLayout {
     pub vertex_attributes: &'static [VertexAttributeType],
     pub metadata: &'static [VertexAttributeMetadata],
     pub shader_layout: &'static [shader::InputType],
+    pub offsets: [u8; std::mem::variant_count::<VertexAttributeType>()],
 }
 
 pub struct StaticMeshSetParams<'a> {
