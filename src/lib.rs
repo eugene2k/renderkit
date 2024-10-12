@@ -2,7 +2,6 @@
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 #![feature(variant_count)]
-#![feature(const_refs_to_static)]
 
 mod buffer;
 mod framebuffer;

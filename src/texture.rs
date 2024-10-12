@@ -2,7 +2,7 @@ use std::num::NonZero;
 
 use format::{AsPtr, DataType, InternalFormat, PixelFormat, ValidDataType, ValidPixelFormat};
 
-use crate::{Sampler, Sampler2D, Sampler2DArray, Type};
+use crate::{Sampler, Type};
 
 use super::panic_if_error;
 // pub struct TextureRef<'a> {
@@ -229,8 +229,8 @@ impl TextureArray {
 // #[derive(Clone, Copy)]
 
 pub struct Texture2DArray {
-    texture_handle: TextureHandle,
-    backup_texture_handle: TextureHandle,
+    texture_handle: Handle,
+    backup_texture_handle: Handle,
     width: u32,
     height: u32,
     layers: u32,
@@ -241,7 +241,7 @@ pub struct Texture2DArray {
     pix_fmt: u32,
 }
 impl Texture2DArray {
-    pub fn get_handle(&self) -> TextureHandle {
+    pub fn get_handle(&self) -> Handle {
         self.texture_handle
     }
     pub fn new_with_capacity<T, P>(
@@ -276,10 +276,10 @@ impl Texture2DArray {
             );
             panic_if_error();
             Self {
-                texture_handle: TextureHandle {
+                texture_handle: Handle {
                     handle: texture_handle,
                 },
-                backup_texture_handle: TextureHandle {
+                backup_texture_handle: Handle {
                     handle: backup_texture_handle,
                 },
                 width,
@@ -314,7 +314,7 @@ impl Texture2DArray {
                 std::ptr::null(),
             );
             panic_if_error();
-            gl::BindTexture(gl::READ_BUFFER, self.backup_texture_handle.handle.into());
+            gl::BindTexture(gl::READ_BUFFER, self.backup_texture_handle.into());
             panic_if_error();
             gl::CopyTexSubImage3D(
                 gl::TEXTURE_2D_ARRAY,
@@ -333,7 +333,7 @@ impl Texture2DArray {
     pub fn try_push(&mut self, texture: &[u8]) -> bool {
         if self.capacity < self.layers {
             unsafe {
-                gl::BindTexture(gl::TEXTURE_2D_ARRAY, self.texture_handle.handle.into());
+                gl::BindTexture(gl::TEXTURE_2D_ARRAY, self.texture_handle.into());
                 panic_if_error();
                 gl::TexSubImage3D(
                     gl::TEXTURE_2D_ARRAY,
@@ -418,7 +418,7 @@ impl Texture2DArray {
 #[derive(Debug, Clone, Copy)]
 #[repr(transparent)]
 pub struct Texture2D {
-    pub(crate) texture_handle: TextureHandle,
+    pub(crate) texture_handle: Handle,
 }
 impl Texture2D {
     pub fn new<IntFmt, PixFmt, DataFmt, Data>(
@@ -457,33 +457,128 @@ impl Texture2D {
             gl::GenerateMipmap(gl::TEXTURE_2D);
             panic_if_error();
             Self {
-                texture_handle: TextureHandle {
-                    handle: texture_handle,
-                },
+                texture_handle: Handle::new(texture_handle),
             }
         }
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct TextureCubemap {
+    texture_handle: Handle,
+}
+
+impl TextureCubemap {
+    pub fn new<IntFmt, PixFmt, DataFmt, Data>(
+        width: u32,
+        height: u32,
+        pixels: Option<&[Data; 6]>,
+    ) -> Self
+    where
+        IntFmt: InternalFormat + ValidPixelFormat<PixFmt>,
+        PixFmt: PixelFormat + ValidDataType<DataFmt>,
+        DataFmt: DataType,
+        Data: AsPtr,
+    {
+        unsafe {
+            let mut texture = std::mem::MaybeUninit::<NonZero<u32>>::uninit();
+            gl::GenTextures(1, texture.as_mut_ptr() as _);
+            panic_if_error();
+            let texture_handle = texture.assume_init();
+            gl::BindTexture(gl::TEXTURE_CUBE_MAP, texture_handle.into());
+            panic_if_error();
+
+            if let Some(pixels) = pixels {
+                for i in 0..6 {
+                    gl::TexImage2D(
+                        gl::TEXTURE_CUBE_MAP_POSITIVE_X,
+                        0,
+                        IntFmt::VALUE as _,
+                        width as _,
+                        height as _,
+                        0,
+                        PixFmt::VALUE,
+                        DataFmt::VALUE,
+                        pixels[i].as_ptr().cast(),
+                    );
+                }
+                panic_if_error();
+            }
+            gl::TexParameteri(
+                gl::TEXTURE_CUBE_MAP,
+                gl::TEXTURE_MAG_FILTER,
+                gl::LINEAR as _,
+            );
+            panic_if_error();
+            gl::TexParameteri(
+                gl::TEXTURE_CUBE_MAP,
+                gl::TEXTURE_MIN_FILTER,
+                gl::LINEAR as _,
+            );
+            panic_if_error();
+            gl::TexParameteri(
+                gl::TEXTURE_CUBE_MAP,
+                gl::TEXTURE_WRAP_S,
+                gl::CLAMP_TO_EDGE as _,
+            );
+            panic_if_error();
+            gl::TexParameteri(
+                gl::TEXTURE_CUBE_MAP,
+                gl::TEXTURE_WRAP_T,
+                gl::CLAMP_TO_EDGE as _,
+            );
+            panic_if_error();
+            gl::TexParameteri(
+                gl::TEXTURE_CUBE_MAP,
+                gl::TEXTURE_WRAP_R,
+                gl::CLAMP_TO_EDGE as _,
+            );
+            panic_if_error();
+            Self {
+                texture_handle: Handle::new(texture_handle),
+            }
+        }
+    }
+}
+
+pub trait Texture {
+    type SamplerType: Sampler;
+    fn get_handle(&self) -> Handle;
+    // fn bind(&self, texture_unit: u32);
+}
+
 impl Texture for Texture2D {
-    type SamplerType = Sampler2D;
-    fn get_handle(&self) -> TextureHandle {
+    type SamplerType = crate::Sampler2D;
+    fn get_handle(&self) -> Handle {
         self.texture_handle
     }
 }
 impl Texture for Texture2DArray {
-    type SamplerType = Sampler2DArray;
-    fn get_handle(&self) -> TextureHandle {
+    type SamplerType = crate::Sampler2DArray;
+    fn get_handle(&self) -> Handle {
         self.texture_handle
     }
 }
-pub trait Texture {
-    type SamplerType: Sampler;
-    fn get_handle(&self) -> TextureHandle;
-    // fn bind(&self, texture_unit: u32);
+impl Texture for TextureCubemap {
+    type SamplerType = crate::SamplerCube;
+
+    fn get_handle(&self) -> Handle {
+        self.texture_handle
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct TextureHandle {
+pub struct Handle {
     pub(crate) handle: NonZero<u32>,
+}
+
+impl Handle {
+    pub fn new(handle: NonZero<u32>) -> Self {
+        Self { handle }
+    }
+}
+impl From<Handle> for u32 {
+    fn from(value: Handle) -> Self {
+        value.handle.get()
+    }
 }

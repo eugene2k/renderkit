@@ -106,17 +106,17 @@ impl VariableDefinitions {
     }
     fn extend(&mut self, decl_list: InitDeclaratorList) {
         let InitDeclaratorList { head, tail } = decl_list;
-        let specifier = TypeSpecifier::from(head.ty.ty.ty);
+        let type_name = TypeName::from(head.ty.ty.ty);
         if let Some(name) = head.name {
             let ty = match head.array_specifier {
                 Some(spec) => match spec.dimensions.0[0] {
                     ArraySpecifierDimension::Unsized => todo!("Unsized array"),
                     ArraySpecifierDimension::ExplicitlySized(ref e) => match e.as_ref() {
-                        &Expr::IntConst(n) => DataType::new(specifier, n as usize),
+                        &Expr::IntConst(n) => DataType::new(type_name, n as usize),
                         _ => todo!("Other Expr types not implemented"),
                     },
                 },
-                None => DataType::new(specifier, 0),
+                None => DataType::new(type_name, 0),
             };
             if let Some(e) = self.0.iter_mut().find(|e| e.ty == ty) {
                 e.vars.push(name.0)
@@ -133,11 +133,11 @@ impl VariableDefinitions {
                 Some(spec) => match spec.dimensions.0[0] {
                     ArraySpecifierDimension::Unsized => todo!("Unsized array"),
                     ArraySpecifierDimension::ExplicitlySized(ref e) => match e.as_ref() {
-                        &Expr::IntConst(n) => DataType::new(specifier, n as usize),
+                        &Expr::IntConst(n) => DataType::new(type_name, n as usize),
                         _ => todo!("Other Expr types not implemented"),
                     },
                 },
-                None => DataType::new(specifier, 0),
+                None => DataType::new(type_name, 0),
             };
             if let Some(e) = self.0.iter_mut().find(|e| e.ty == ty) {
                 e.vars.push(name)
@@ -205,8 +205,8 @@ impl syn::parse::Parse for Field {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct TypeSpecifier(&'static str);
-impl TypeSpecifier {
+struct TypeName(&'static str);
+impl TypeName {
     const VEC2: Self = Self("Vec2");
     const VEC3: Self = Self("Vec3");
     const VEC4: Self = Self("Vec4");
@@ -216,17 +216,18 @@ impl TypeSpecifier {
     const MAT4: Self = Self("Mat4");
     const SAMPLER_2D: Self = Self("Sampler2D");
     const SAMPLER_2D_ARRAY: Self = Self("Sampler2DArray");
+    const SAMPLER_CUBE: Self = Self("SamplerCube");
     fn is_sampler(self) -> bool {
-        self == Self::SAMPLER_2D || self == Self::SAMPLER_2D_ARRAY
+        self == Self::SAMPLER_2D || self == Self::SAMPLER_2D_ARRAY || self == Self::SAMPLER_CUBE
     }
 }
 
-impl PartialEq for TypeSpecifier {
+impl PartialEq for TypeName {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
     }
 }
-impl From<TypeSpecifierNonArray> for TypeSpecifier {
+impl From<TypeSpecifierNonArray> for TypeName {
     fn from(value: TypeSpecifierNonArray) -> Self {
         match value {
             TypeSpecifierNonArray::Void => todo!(),
@@ -274,7 +275,7 @@ impl From<TypeSpecifierNonArray> for TypeSpecifier {
             TypeSpecifierNonArray::Image2D => todo!(),
             TypeSpecifierNonArray::Sampler3D => todo!(),
             TypeSpecifierNonArray::Image3D => todo!(),
-            TypeSpecifierNonArray::SamplerCube => todo!(),
+            TypeSpecifierNonArray::SamplerCube => Self::SAMPLER_CUBE,
             TypeSpecifierNonArray::ImageCube => todo!(),
             TypeSpecifierNonArray::Sampler2DRect => todo!(),
             TypeSpecifierNonArray::Image2DRect => todo!(),
@@ -349,23 +350,23 @@ impl From<TypeSpecifierNonArray> for TypeSpecifier {
 }
 #[derive(Debug, PartialEq)]
 struct DataType {
-    specifier: TypeSpecifier,
+    name: TypeName,
     elements_count: usize,
 }
 impl DataType {
-    fn new(specifier: TypeSpecifier, elements_count: usize) -> Self {
+    fn new(specifier: TypeName, elements_count: usize) -> Self {
         Self {
-            specifier,
+            name: specifier,
             elements_count,
         }
     }
     fn as_mangled_ident(&self) -> syn::Ident {
         if self.elements_count > 0 {
-            let encoded_type = Self::mangle_type_name(self.specifier.0);
+            let encoded_type = Self::mangle_type_name(self.name.0);
             let array_size = self.elements_count;
             format_ident!("_{encoded_type}_{array_size}")
         } else {
-            let encoded_type = Self::mangle_type_name(self.specifier.0);
+            let encoded_type = Self::mangle_type_name(self.name.0);
             format_ident!("_{encoded_type}")
         }
     }
@@ -384,7 +385,7 @@ impl DataType {
         output
     }
     fn as_token_stream(&self, qualifier: &syn::Path) -> quote::__private::TokenStream {
-        let ty_name = format_ident!("{}", self.specifier.0);
+        let ty_name = format_ident!("{}", self.name.0);
         if self.elements_count > 0 {
             let n = self.elements_count;
             quote::quote! {[#qualifier::#ty_name; #n]}
@@ -393,7 +394,7 @@ impl DataType {
         }
     }
     fn is_sampler_type(&self) -> bool {
-        self.specifier.is_sampler()
+        self.name.is_sampler()
     }
 }
 

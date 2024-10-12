@@ -211,4 +211,5 @@ macro_rules! declare_sampler_types {
 declare_sampler_types! {
     Sampler2D = gl::TEXTURE_2D;
     Sampler2DArray = gl::TEXTURE_2D_ARRAY;
+    SamplerCube = gl::TEXTURE_CUBE_MAP;
 }
