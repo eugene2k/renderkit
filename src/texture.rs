@@ -161,7 +161,7 @@ pub mod format {
     pub trait AsPtr {
         fn as_ptr(&self) -> *const u8;
     }
-    impl<T> AsPtr for [T] {
+    impl<'a, T> AsPtr for &'a [T] {
         fn as_ptr(&self) -> *const u8 {
             <[T]>::as_ptr(self).cast()
         }
@@ -421,16 +421,12 @@ pub struct Texture2D {
     pub(crate) texture_handle: Handle,
 }
 impl Texture2D {
-    pub fn new<IntFmt, PixFmt, DataFmt, Data>(
-        width: u32,
-        height: u32,
-        pixels: Option<&Data>,
-    ) -> Self
+    pub fn new<IntFmt, PixFmt, DataFmt, Data>(width: u32, height: u32, pixels: Option<Data>) -> Self
     where
         IntFmt: InternalFormat + ValidPixelFormat<PixFmt>,
         PixFmt: PixelFormat + ValidDataType<DataFmt>,
         DataFmt: DataType,
-        Data: AsPtr + ?Sized,
+        Data: AsPtr,
     {
         unsafe {
             let mut texture = std::mem::MaybeUninit::<NonZero<u32>>::uninit();
