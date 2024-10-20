@@ -487,7 +487,7 @@ impl TextureCubemap {
             if let Some(pixels) = pixels {
                 for i in 0..6 {
                     gl::TexImage2D(
-                        gl::TEXTURE_CUBE_MAP_POSITIVE_X,
+                        gl::TEXTURE_CUBE_MAP_POSITIVE_X + i,
                         0,
                         IntFmt::VALUE as _,
                         width as _,
@@ -495,10 +495,10 @@ impl TextureCubemap {
                         0,
                         PixFmt::VALUE,
                         DataFmt::VALUE,
-                        pixels[i].as_ptr().cast(),
+                        pixels[i as usize].as_ptr().cast(),
                     );
+                    panic_if_error();
                 }
-                panic_if_error();
             }
             gl::TexParameteri(
                 gl::TEXTURE_CUBE_MAP,
